@@ -5,6 +5,7 @@ from threading import Timer
 
 import requests
 from BeautifulSoup import BeautifulSoup
+import chardet
 
 
 class Crawler(object):
@@ -14,44 +15,50 @@ class Crawler(object):
         :param outfile: Place output
         """
         response = requests.get(url)
-        html = response.content.decode(response.encoding)
+        self.encoding = chardet.detect(response.content).get('encoding')
+        html = response.content.decode(self.encoding, 'ignore')
         self.soup = BeautifulSoup(html)
-        self.outfile = '%s/%s' %(outfile, time.strftime('%Y%m%d%H%M%S'))
+        self.outfile = '%s/%s' % (outfile, time.strftime('%Y%m%d%H%M%S'))
 
-    def do_request(tag, select, attr, path):
+    def do_request(tag):
         """
          Request source and change url to local.
         :param tag: tag to change, like 'img'.
-        :param select: attribute filter to tag, like {'src': True}.
-        :param attr: attribute to change, this should be a URL.
-        :param path: relative path to save source.
         :return:
         """
         def decorator(fn):
-            def wrapper(self, *args, **kwargs):
+            def wrapper(self, select, attr, path, *args, **kwargs):
+                """
+                :param select: attribute filter to tag, like {'src': True}.
+                :param attr: attribute to change, this should be a URL.
+                :param path: relative path to save source.
+                :return:
+                """
                 tags = self.soup.findAll(tag, attrs=select)
                 for tag_ in tags:
                     url = tag_[attr]
                     name = url.split('/')[-1].split('?')[0]
+                    if not url.startswith('http'):  # some incomplete URL
+                        url = 'http://%s' % url.split('//', 1)[-1]
                     source = requests.get(url).content
                     tag_[attr] = '%s/%s' % (path, name)
                     self.save(path=path, name=name, source=source)
             return wrapper
         return decorator
 
-    @do_request('link', {'type': 'text/css', 'href': True}, 'href', 'css')
-    def css_parse(self,):
+    @do_request('link')
+    def css_parse(self):
         pass
 
-    @do_request('img', {'src': True}, 'src', 'images')
+    @do_request('img')
     def image_parse(self):
         pass
 
-    @do_request('script', {'src': True}, 'src', 'js')
+    @do_request('script')
     def js_parse(self):
         pass
 
-    @do_request('iframe', {'src': True}, 'src', 'iframe')
+    @do_request('iframe')
     def iframe_parse(self):
         pass
 
@@ -81,12 +88,12 @@ def main():
     option_parser(parser)
     (options, args) = parser.parse_args()
     crawler = Crawler(options.url, options.outfile)
-    crawler.css_parse()
-    crawler.js_parse()
-    crawler.image_parse()
+    crawler.css_parse({'type': 'text/css', 'href': True}, 'href', 'css')
+    crawler.js_parse({'src': True}, 'src', 'js')
+    crawler.image_parse({'src': True}, 'src', 'images')
+    crawler.image_parse({'_src': True}, '_src', 'images')
+    crawler.iframe_parse({'src': True}, 'src', 'iframe')
     crawler.html_parse()
-    crawler.iframe_parse()
-
 
 if __name__ == '__main__':
     main()
