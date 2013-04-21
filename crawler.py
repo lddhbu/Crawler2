@@ -4,8 +4,8 @@ import time
 from threading import Timer
 
 import requests
-from BeautifulSoup import BeautifulSoup
 import chardet
+from BeautifulSoup import BeautifulSoup
 
 
 class Crawler(object):
@@ -14,11 +14,19 @@ class Crawler(object):
         :param url: url to Crawling
         :param outfile: Place output
         """
-        response = requests.get(url)
+        self.url = url
+        self.outfile = outfile
+
+    def refresh(self):
+        """
+        refresh html and soup
+        :return:
+        """
+        response = requests.get(self.url)
         self.encoding = chardet.detect(response.content).get('encoding')
         html = response.content.decode(self.encoding, 'ignore')
         self.soup = BeautifulSoup(html)
-        self.outfile = '%s/%s' % (outfile, time.strftime('%Y%m%d%H%M%S'))
+        self.directory = '%s/%s' % (self.outfile, time.strftime('%Y%m%d%H%M%S'))
 
     def do_request(tag):
         """
@@ -66,7 +74,7 @@ class Crawler(object):
         self.save(path='', name='index.html', source=str(self.soup))
 
     def save(self, path, name, source):
-        path_ = '%s/%s' % (self.outfile, path)
+        path_ = '%s/%s' % (self.directory, path)
         if not os.path.exists(path_):
             os.makedirs(path_)
         fp = open('%s/%s' % (path_, name), 'w')
@@ -75,12 +83,30 @@ class Crawler(object):
 
 
 def option_parser(parser):
-    parser.add_option("-d", "--time", dest="time",
-                      help="Interval of saving the file")
+    parser.add_option("-d", "--interval", dest="interval",
+                      help="Interval of crawling the web")
     parser.add_option("-u", "--url", dest="url",
                       help="Url to crawler")
     parser.add_option("-o", "--outfile", dest="outfile",
                       help="Place output in file")
+
+
+def timer(crawler, interval):
+    """
+    Repeat
+    :param crawler:
+    :param interval:
+    :return:
+    """
+    t = Timer(int(interval), timer, (crawler, interval))
+    t.start()
+    crawler.refresh()
+    crawler.css_parse({'type': 'text/css', 'href': True}, 'href', 'css')
+    crawler.js_parse({'src': True}, 'src', 'js')
+    crawler.image_parse({'src': True}, 'src', 'images')
+    crawler.image_parse({'_src': True}, '_src', 'images')
+    crawler.iframe_parse({'src': True}, 'src', 'iframe')
+    crawler.html_parse()
 
 
 def main():
@@ -88,12 +114,8 @@ def main():
     option_parser(parser)
     (options, args) = parser.parse_args()
     crawler = Crawler(options.url, options.outfile)
-    crawler.css_parse({'type': 'text/css', 'href': True}, 'href', 'css')
-    crawler.js_parse({'src': True}, 'src', 'js')
-    crawler.image_parse({'src': True}, 'src', 'images')
-    crawler.image_parse({'_src': True}, '_src', 'images')
-    crawler.iframe_parse({'src': True}, 'src', 'iframe')
-    crawler.html_parse()
+    timer(crawler, options.interval)
+
 
 if __name__ == '__main__':
     main()
