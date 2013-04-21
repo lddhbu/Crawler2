@@ -1,6 +1,7 @@
 import os
 import optparse
 import time
+from threading import Timer
 
 import requests
 from BeautifulSoup import BeautifulSoup
@@ -10,12 +11,22 @@ class Crawler(object):
     def __init__(self, url, outfile):
         """
         :param url: url to Crawling
+        :param outfile: Place output
         """
-        html = requests.get(url).content.decode('utf-8')
+        response = requests.get(url)
+        html = response.content.decode(response.encoding)
         self.soup = BeautifulSoup(html)
-        self.outfile = outfile
+        self.outfile = '%s/%s' %(outfile, time.strftime('%Y%m%d%H%M%S'))
 
     def do_request(tag, select, attr, path):
+        """
+         Request source and change url to local.
+        :param tag: tag to change, like 'img'.
+        :param select: attribute filter to tag, like {'src': True}.
+        :param attr: attribute to change, this should be a URL.
+        :param path: relative path to save source.
+        :return:
+        """
         def decorator(fn):
             def wrapper(self, *args, **kwargs):
                 tags = self.soup.findAll(tag, attrs=select)
@@ -40,11 +51,15 @@ class Crawler(object):
     def js_parse(self):
         pass
 
+    @do_request('iframe', {'src': True}, 'src', 'iframe')
+    def iframe_parse(self):
+        pass
+
     def html_parse(self):
         self.save(path='', name='index.html', source=str(self.soup))
 
     def save(self, path, name, source):
-        path_ = '%s/%s/%s' % (self.outfile, time.strftime('%Y%m%d%H%M%S'), path)
+        path_ = '%s/%s' % (self.outfile, path)
         if not os.path.exists(path_):
             os.makedirs(path_)
         fp = open('%s/%s' % (path_, name), 'w')
@@ -54,11 +69,11 @@ class Crawler(object):
 
 def option_parser(parser):
     parser.add_option("-d", "--time", dest="time",
-        help="Period of time")
+                      help="Interval of saving the file")
     parser.add_option("-u", "--url", dest="url",
-        help="Url to crawler")
+                      help="Url to crawler")
     parser.add_option("-o", "--outfile", dest="outfile",
-        help="Place output in file")
+                      help="Place output in file")
 
 
 def main():
@@ -67,8 +82,10 @@ def main():
     (options, args) = parser.parse_args()
     crawler = Crawler(options.url, options.outfile)
     crawler.css_parse()
+    crawler.js_parse()
     crawler.image_parse()
     crawler.html_parse()
+    crawler.iframe_parse()
 
 
 if __name__ == '__main__':
